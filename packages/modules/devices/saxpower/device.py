@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 import logging
-from typing import Iterable
+from typing import Iterable, Union
 
 from modules.common import modbus
 from modules.common.abstract_device import DeviceDescriptor
 from modules.common.component_context import SingleComponentUpdateContext
 from modules.common.configurable_device import ComponentFactoryByType, ConfigurableDevice, MultiComponentUpdater
 from modules.devices.saxpower.bat import SaxpowerBat
-from modules.devices.saxpower.config import Saxpower, SaxpowerBatSetup
+from modules.devices.saxpower.counter import SaxpowerCounter
+from modules.devices.saxpower.config import Saxpower, SaxpowerBatSetup, SaxpowerCounterSetup
 
 log = logging.getLogger(__name__)
 
 
 def create_device(device_config: Saxpower):
     def create_bat_component(component_config: SaxpowerBatSetup):
-        return SaxpowerBat(device_config.id, component_config, client, device_config.configuration.modbus_id)
+        return SaxpowerBat(device_config.id, component_config, device_config.configuration.modbus_id)
 
-    def update_components(components: Iterable[SaxpowerBat]):
-        with client:
+    def create_counter_component(component_config: SaxpowerCounterSetup):
+        return SaxpowerCounter(device_config.id, component_config, device_config.configuration.modbus_id)
+
+    def update_components(components: Iterable[Union[SaxpowerBat, SaxpowerCounter]]):
+        with client as c:
             for component in components:
                 with SingleComponentUpdateContext(component.fault_state):
-                    component.update()
+                    component.update(c)
 
     try:
         client = modbus.ModbusTcpClient_(device_config.configuration.ip_address, device_config.configuration.port)
