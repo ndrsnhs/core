@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from typing import TypedDict, Any
+import logging
+from typing import TypedDict, Any, Optional
 
 from modules.common import modbus
 from modules.common.abstract_device import AbstractBat
@@ -10,6 +11,8 @@ from modules.common.modbus import ModbusDataType
 from modules.common.simcount import SimCounter
 from modules.common.store import get_bat_value_store
 from modules.devices.saxpower.saxpower.config import SaxpowerBatSetup
+
+log = logging.getLogger(__name__)
 
 
 class KwargsDict(TypedDict):
@@ -30,6 +33,7 @@ class SaxpowerBat(AbstractBat):
         self.sim_counter = SimCounter(self.__device_id, self.component_config.id, prefix="speicher")
         self.store = get_bat_value_store(self.component_config.id)
         self.fault_state = FaultState(ComponentInfo.from_component_config(self.component_config))
+        self.last_mode = 'Undefined'
 
     def update(self) -> None:
         with self.__tcp_client:
@@ -45,6 +49,32 @@ class SaxpowerBat(AbstractBat):
             exported=exported
         )
         self.store.set(bat_state)
+
+    def set_power_limit(self, power_limit: Optional[int]) -> None:
+        unit = self.device_config.configuration.modbus_id
+        log.debug(f'last_mode: {self.last_mode}')
+
+        if power_limit is None:
+            # Bei Saxpower muss der Smartmeter in gesonderter Software aktiviert/ deaktiviert werden.
+            log.debug("Bei Saxpower muss der Smartmeter in gesonderter Software aktiviert/ deaktiviert werden.")
+            if self.last_mode is not None:
+                self.last_mode = None
+        elif power_limit == 0:
+            log.debug("Aktive Batteriesteuerung. Batterie wird auf Stop gesetzt und nicht entladen")
+            if self.last_mode != 'stop':
+                self.__tcp_client.write_registers(0x29, 0, data_type=ModbusDataType.INT_16, unit=unit)
+                self.last_mode = 'stop'
+        elif power_limit > 0:
+            log.debug(f"Aktive Batteriesteuerung. Batterie wird mit {power_limit} W entladen für den Hausverbrauch")
+            if self.last_mode != 'discharge':
+                self.last_mode = 'discharge'
+            # Die maximale Entladeleistung begrenzen auf 4600W, maximaler Wertebereich Saxpower.
+            power_value = int(min(abs(power_limit), 4600))
+            log.debug(f"Aktive Batteriesteuerung. Batterie wird mit {power_value} W entladen für den Hausverbrauch")
+            self.__tcp_client.write_registers(0x29, [power_value], data_type=ModbusDataType.INT_16, unit=unit)
+
+    def power_limit_controllable(self) -> bool:
+        return True
 
 
 component_descriptor = ComponentDescriptor(configuration_factory=SaxpowerBatSetup)
