@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from typing import TypedDict, Any
+from typing import TypedDict, Any, Union
+from pysolarmanv5 import PySolarmanV5
 
 from modules.common.abstract_device import AbstractCounter
 from modules.common.component_state import CounterState
@@ -14,7 +15,9 @@ from modules.devices.deye.deye.device_type import DeviceType
 
 class KwargsDict(TypedDict):
     device_id: int
-    client: ModbusTcpClient_
+    modbus_id: int
+    client: Union[ModbusTcpClient_, PySolarmanV5]
+    device_type: DeviceType
 
 
 class DeyeCounter(AbstractCounter):
@@ -24,41 +27,68 @@ class DeyeCounter(AbstractCounter):
 
     def initialize(self) -> None:
         self.__device_id: int = self.kwargs['device_id']
-        self.client: ModbusTcpClient_ = self.kwargs['client']
+        self.modbus_id: int = self.kwargs['modbus_id']
+        self.client: Union[ModbusTcpClient_, PySolarmanV5] = self.kwargs['client']
+        self.device_type = self.kwargs['device_type']
         self.store = get_counter_value_store(self.component_config.id)
         self.fault_state = FaultState(ComponentInfo.from_component_config(self.component_config))
         self.sim_counter = SimCounter(self.__device_id, self.component_config.id, prefix="bezug")
-        self.device_type = DeviceType(self.client.read_holding_registers(
-            0, ModbusDataType.INT_16, unit=self.component_config.configuration.modbus_id))
 
     def update(self):
-        unit = self.component_config.configuration.modbus_id
+        if isinstance(self.client, ModbusTcpClient_):
+            if self.device_type == DeviceType.SINGLE_PHASE_STRING or self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
+                frequency = self.client.read_holding_registers(79, ModbusDataType.INT_16, unit=self.modbus_id) / 100
 
-        if self.device_type == DeviceType.SINGLE_PHASE_STRING or self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
-            frequency = self.client.read_holding_registers(79, ModbusDataType.INT_16, unit=unit) / 100
+                if self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
+                    powers = [0]*3
+                    currents = [0]*3
+                    voltages = [0]*3
+                    power = [0]
+                    imported, exported = self.sim_counter.sim_count(power)
 
-            if self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
-                powers = [0]*3
-                currents = [0]*3
-                voltages = [0]*3
-                power = [0]
-                imported, exported = self.sim_counter.sim_count(power)
+                elif self.device_type == DeviceType.SINGLE_PHASE_STRING:
+                    currents = [c / 100 for c in 
+                                self.client.read_holding_registers(76, [ModbusDataType.INT_16]*3, unit=self.modbus_id)]
+                    voltages = [v / 10 for v in
+                                self.client.read_holding_registers(70, [ModbusDataType.INT_16]*3, unit=self.modbus_id)]
+                    powers = [currents[i] * voltages[i] for i in range(0, 3)]
+                    power = sum(powers)
+                    imported, exported = self.sim_counter.sim_count(power)
 
-            elif self.device_type == DeviceType.SINGLE_PHASE_STRING:
-                currents = [
-                    c / 100 for c in self.client.read_holding_registers(76, [ModbusDataType.INT_16]*3, unit=unit)]
-                voltages = [
-                    v / 10 for v in self.client.read_holding_registers(70, [ModbusDataType.INT_16]*3, unit=unit)]
-                powers = [currents[i] * voltages[i] for i in range(0, 3)]
+            else:  # THREE_PHASE_LV (0x0500, 0x0005), THREE_PHASE_HV (0x0006)
+                currents = [c / 100 for c in
+                            self.client.read_holding_registers(613, [ModbusDataType.INT_16]*3, unit=self.modbus_id)]
+                voltages = [v / 10 for v in
+                            self.client.read_holding_registers(644, [ModbusDataType.INT_16]*3, unit=self.modbus_id)]
+                powers = self.client.read_holding_registers(616, [ModbusDataType.INT_16]*3, unit=self.modbus_id)
                 power = sum(powers)
                 imported, exported = self.sim_counter.sim_count(power)
+        else:  # LSW-Dongle - PySolarmanV5
+            if self.device_type == DeviceType.SINGLE_PHASE_STRING or self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
+                frequency = self.client.read_holding_registers(79, 1) / 100
 
-        else:  # THREE_PHASE_LV (0x0500, 0x0005), THREE_PHASE_HV (0x0006)
-            currents = [c / 100 for c in self.client.read_holding_registers(613, [ModbusDataType.INT_16]*3, unit=unit)]
-            voltages = [v / 10 for v in self.client.read_holding_registers(644, [ModbusDataType.INT_16]*3, unit=unit)]
-            powers = self.client.read_holding_registers(616, [ModbusDataType.INT_16]*3, unit=unit)
-            power = sum(powers)
-            imported, exported = self.sim_counter.sim_count(power)
+                if self.device_type == DeviceType.SINGLE_PHASE_HYBRID:
+                    powers = [0]*3
+                    currents = [0]*3
+                    voltages = [0]*3
+                    power = [0]
+                    imported, exported = self.sim_counter.sim_count(power)
+
+                elif self.device_type == DeviceType.SINGLE_PHASE_STRING:
+                    currents = [
+                        c / 100 for c in self.client.read_holding_registers(76, 3)]
+                    voltages = [
+                        v / 10 for v in self.client.read_holding_registers(70, 3)]
+                    powers = [currents[i] * voltages[i] for i in range(0, 3)]
+                    power = sum(powers)
+                    imported, exported = self.sim_counter.sim_count(power)
+
+            else:  # THREE_PHASE_LV (0x0500, 0x0005), THREE_PHASE_HV (0x0006)
+                currents = [c / 100 for c in self.client.read_holding_registers(613, 3)]
+                voltages = [v / 10 for v in self.client.read_holding_registers(644, 3)]
+                powers = self.client.read_holding_registers(616, 3)
+                power = sum(powers)
+                imported, exported = self.sim_counter.sim_count(power)
 
         counter_state = CounterState(
             currents=currents,

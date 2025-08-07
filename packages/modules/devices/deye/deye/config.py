@@ -8,9 +8,15 @@ from ..vendor import vendor_descriptor
 class DeyeConfiguration:
     def __init__(self,
                  ip_address: Optional[str] = None,
-                 port: int = 8899):
+                 port: int = 8899,
+                 modbus_id: int = 1,
+                 lsw: bool = False,
+                 serial: Optional[int] = None):
         self.ip_address = ip_address
         self.port = port
+        self.modbus_id = modbus_id
+        self.lsw = lsw
+        self.serial = serial
 
 
 class Deye:
@@ -28,8 +34,8 @@ class Deye:
 
 @auto_str
 class DeyeBatConfiguration:
-    def __init__(self, modbus_id: int = 1):
-        self.modbus_id = modbus_id
+    def __init__(self):
+        pass
 
 
 @auto_str
@@ -44,8 +50,8 @@ class DeyeBatSetup(ComponentSetup[DeyeBatConfiguration]):
 
 @auto_str
 class DeyeCounterConfiguration:
-    def __init__(self, modbus_id: int = 1):
-        self.modbus_id = modbus_id
+    def __init__(self):
+        pass
 
 
 @auto_str
@@ -60,8 +66,8 @@ class DeyeCounterSetup(ComponentSetup[DeyeCounterConfiguration]):
 
 @auto_str
 class DeyeInverterConfiguration:
-    def __init__(self, modbus_id: int = 1):
-        self.modbus_id = modbus_id
+    def __init__(self):
+        pass
 
 
 @auto_str
