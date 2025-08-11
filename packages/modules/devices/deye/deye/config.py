@@ -11,7 +11,7 @@ class DeyeConfiguration:
                  port: int = 8899,
                  modbus_id: int = 1,
                  lsw: bool = False,
-                 serial: Optional[int] = None):
+                 serial: Optional[str] = None):
         self.ip_address = ip_address
         self.port = port
         self.modbus_id = modbus_id
