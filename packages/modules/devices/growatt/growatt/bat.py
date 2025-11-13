@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from typing import TypedDict, Any
+import logging
+from typing import TypedDict, Any, Optional
 
 from modules.common.abstract_device import AbstractBat
 from modules.common.component_state import BatState
@@ -9,6 +10,8 @@ from modules.common.modbus import ModbusDataType, ModbusTcpClient_
 from modules.common.store import get_bat_value_store
 from modules.devices.growatt.growatt.config import GrowattBatSetup
 from modules.devices.growatt.growatt.version import GrowattVersion
+
+log = logging.getLogger(__name__)
 
 
 class KwargsDict(TypedDict):
@@ -62,6 +65,42 @@ class GrowattBat(AbstractBat):
             exported=exported
         )
         self.store.set(bat_state)
+
+    def set_power_limit(self, power_limit: Optional[int]) -> None:
+        unit = self.__modbus_id
+        if self.version == GrowattVersion.max_series:
+            log.debug(f'last_mode: {self.last_mode}')
+
+            if power_limit is None:
+                log.debug("Keine Batteriesteuerung, Selbstregelung durch Wechselrichter")
+                if self.last_mode is not None:
+                    # disable battery first
+                    self.__tcp_client.write_registers(1102, [0], data_type=ModbusDataType.UINT_16, unit=unit)
+                    # disable ac_charge
+                    self.__tcp_client.write_registers(1092, [0], data_type=ModbusDataType.UINT_16, unit=unit)
+                    self.last_mode = None
+            elif power_limit <= 0:
+                log.debug("Aktive Batteriesteuerung. Batterie wird auf Stop gesetzt und nicht entladen")
+                if self.last_mode != 'stop':
+                    # enable battery first
+                    self.__tcp_client.write_registers(1102, [1], data_type=ModbusDataType.UINT_16, unit=unit)
+                    # disable ac_charge
+                    self.__tcp_client.write_registers(1092, [0], data_type=ModbusDataType.UINT_16, unit=unit)
+                    self.last_mode = 'stop'
+            else:
+                log.debug("Aktive Batteriesteuerung. Batterie wird geladen")
+                if self.last_mode != 'charge':
+                    # enable battery first
+                    self.__tcp_client.write_registers(1102, [1], data_type=ModbusDataType.UINT_16, unit=unit)
+                    # enable ac_charge
+                    self.__tcp_client.write_registers(1092, [1], data_type=ModbusDataType.UINT_16, unit=unit)
+                    self.last_mode = 'charge'
+
+    def power_limit_controllable(self) -> bool:
+        if self.version == GrowattVersion.max_series:
+            return True
+        else:
+            return False
 
 
 component_descriptor = ComponentDescriptor(configuration_factory=GrowattBatSetup)
