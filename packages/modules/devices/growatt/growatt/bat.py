@@ -74,25 +74,22 @@ class GrowattBat(AbstractBat):
             if power_limit is None:
                 log.debug("Keine Batteriesteuerung, Selbstregelung durch Wechselrichter")
                 if self.last_mode is not None:
-                    # disable battery first
+                    # disable battery first and disable ac_charge
                     self.__tcp_client.write_registers(1102, [0], data_type=ModbusDataType.UINT_16, unit=unit)
-                    # disable ac_charge
                     self.__tcp_client.write_registers(1092, [0], data_type=ModbusDataType.UINT_16, unit=unit)
                     self.last_mode = None
             elif power_limit <= 0:
                 log.debug("Aktive Batteriesteuerung. Batterie wird auf Stop gesetzt und nicht entladen")
                 if self.last_mode != 'stop':
-                    # enable battery first
+                    # enable battery first and disable ac_charge
                     self.__tcp_client.write_registers(1102, [1], data_type=ModbusDataType.UINT_16, unit=unit)
-                    # disable ac_charge
                     self.__tcp_client.write_registers(1092, [0], data_type=ModbusDataType.UINT_16, unit=unit)
                     self.last_mode = 'stop'
             else:
                 log.debug("Aktive Batteriesteuerung. Batterie wird geladen")
                 if self.last_mode != 'charge':
-                    # enable battery first
+                    # enable battery first and enable ac_charge
                     self.__tcp_client.write_registers(1102, [1], data_type=ModbusDataType.UINT_16, unit=unit)
-                    # enable ac_charge
                     self.__tcp_client.write_registers(1092, [1], data_type=ModbusDataType.UINT_16, unit=unit)
                     self.last_mode = 'charge'
 
