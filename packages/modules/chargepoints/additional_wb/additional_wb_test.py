@@ -35,11 +35,9 @@ class TestAdditionalWb:
         evse_current=7,
         rfid=None,
         rfid_timestamp=None,
-        serial_number='822013',
+        serial_number='1234',
         max_evse_current=16,
-        version='1.2.3',
-        # serial_meter=json_rsp["serial_meter"]
-        # fault_str=json_rsp["fault_str"]
+        version='1.2.3'
     )
     SAMPLE_V1 = {
         "timestamp": "2024:12:03-09:14:44",  # local time

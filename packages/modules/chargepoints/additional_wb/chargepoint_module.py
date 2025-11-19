@@ -52,10 +52,9 @@ class ChargepointModule(AbstractChargepoint):
                     evse_current=json_rsp["offered_current"],
                     rfid=json_rsp["rfid_tag"],
                     rfid_timestamp=json_rsp["rfid_timestamp"],
-                    serial_number=json_rsp["serial"],
+                    serial_number=json_rsp["serial_meter"],
                     max_evse_current=json_rsp["max_current_multi_phases"],
                     version=json_rsp["firmware_version"],
-                    # serial_meter=json_rsp["serial_meter"]
                     # fault_str=json_rsp["fault_str"]
                 )
 

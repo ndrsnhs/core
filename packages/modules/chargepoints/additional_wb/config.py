@@ -6,11 +6,9 @@ from modules.common.abstract_chargepoint import SetupChargepoint
 class AdditionalWBConfiguration:
     def __init__(self,
                  ip_address: Optional[str] = None,
-                 token: Optional[str] = None,
-                 timeout: int = 2):
+                 token: Optional[str] = None):
         self.ip_address = ip_address
         self.token = token
-        self.timeout = timeout
 
 
 class AdditionalWB(SetupChargepoint[AdditionalWBConfiguration]):
