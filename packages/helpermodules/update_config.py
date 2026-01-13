@@ -57,7 +57,7 @@ NO_MODULE = {"type": None, "configuration": {}}
 
 class UpdateConfig:
 
-    DATASTORE_VERSION = 107
+    DATASTORE_VERSION = 108
 
     valid_topic = [
         "^openWB/bat/config/bat_control_permitted$",
@@ -2701,3 +2701,13 @@ class UpdateConfig:
                         return {topic: provider}
         self._loop_all_received_topics(upgrade)
         self._append_datastore_version(107)
+
+    def upgrade_datastore_108(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if "openWB/general/charge_log_data_config" == topic:
+                config = decode_payload(payload)
+                if config.get("mid_meter") is None:
+                    config["mid_meter"] = False
+                return {topic: config}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(108)

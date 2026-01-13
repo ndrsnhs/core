@@ -26,6 +26,7 @@ from helpermodules.utils.json_file_handler import write_and_check
 #         "serial_number": "0123456,"
 #         "imported_at_start": 1000,
 #         "imported_at_end": 2000,
+#         "mid_meter": True,
 #     },
 #     "vehicle":
 #     {
@@ -259,6 +260,7 @@ def _create_entry(chargepoint, charging_ev):
             "imported_at_end": get_value_or_default(lambda: chargepoint.data.get.imported),
             "exported_at_start": get_value_or_default(lambda: log_data.exported_at_mode_switch),
             "exported_at_end": get_value_or_default(lambda: chargepoint.data.get.exported),
+            "mid_meter": get_value_or_default(lambda: chargepoint.data.get.mid_meter, True),
         },
         "vehicle":
         {

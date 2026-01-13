@@ -183,6 +183,7 @@ class ChargepointState:
                  charge_state: bool,
                  plug_state: Optional[bool],
                  serial_number: str = "",
+                 mid_meter: Optional[bool] = True,
                  charging_current: Optional[float] = 0,
                  charging_voltage: Optional[float] = 0,
                  charging_power: Optional[float] = 0,
@@ -209,6 +210,7 @@ class ChargepointState:
         self.exported = exported
         self.power = power
         self.serial_number = serial_number
+        self.mid_meter = mid_meter
         self.phases_in_use = phases_in_use
         self.charge_state = charge_state
         self.plug_state = plug_state
