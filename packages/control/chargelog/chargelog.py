@@ -73,47 +73,66 @@ def collect_data(chargepoint):
     """
     try:
         now = timecheck.create_timestamp()
-        log_data = chargepoint.data.set.log
-        charging_ev = chargepoint.data.set.charging_ev_data
-        if chargepoint.data.get.plug_state:
+        log_data = get_value_or_default(lambda: chargepoint.data.set.log)
+        charging_ev = get_value_or_default(lambda: chargepoint.data.set.charging_ev_data)
+        if get_value_or_default(lambda: chargepoint.data.get.plug_state, False):
             # Zählerstand beim Einschalten merken
-            if log_data.imported_at_plugtime == 0:
-                log_data.imported_at_plugtime = chargepoint.data.get.imported
-                log.debug(f"imported_at_plugtime {chargepoint.data.get.imported}")
+            if get_value_or_default(lambda: log_data.imported_at_plugtime == 0, True):
+                log_data.imported_at_plugtime = get_value_or_default(lambda: chargepoint.data.get.imported, 0)
+                log.debug(f"imported_at_plugtime {log_data.imported_at_plugtime}")
             # Bisher geladene Energie ermitteln
             log_data.imported_since_plugged = get_value_or_default(
-                lambda: chargepoint.data.get.imported - log_data.imported_at_plugtime)
-            if log_data.imported_at_mode_switch == 0:
-                log_data.imported_at_mode_switch = chargepoint.data.get.imported
-                log.debug(f"imported_at_mode_switch {chargepoint.data.get.imported}")
-            if log_data.timestamp_mode_switch is None:
+                lambda: chargepoint.data.get.imported - log_data.imported_at_plugtime, 0)
+            if get_value_or_default(lambda: log_data.exported_at_plugtime == 0, True):
+                log_data.exported_at_plugtime = get_value_or_default(lambda: chargepoint.data.get.exported, 0)
+            log_data.exported_since_plugged = get_value_or_default(
+                lambda: chargepoint.data.get.exported - log_data.exported_at_plugtime, 0)
+
+            if get_value_or_default(lambda: log_data.imported_at_mode_switch == 0, True):
+                log_data.imported_at_mode_switch = get_value_or_default(lambda: chargepoint.data.get.imported, 0)
+                log.debug(f"imported_at_mode_switch {log_data.imported_at_mode_switch}")
+
+            if get_value_or_default(lambda: log_data.exported_at_mode_switch == 0, True):
+                log_data.exported_at_mode_switch = get_value_or_default(lambda: chargepoint.data.get.exported, 0)
+
+            if get_value_or_default(lambda: log_data.timestamp_mode_switch is None):
                 log_data.timestamp_mode_switch = now
-            if chargepoint.data.get.charge_state:
-                if log_data.timestamp_start_charging is None:
+
+            if get_value_or_default(lambda: chargepoint.data.get.charge_state, False):
+                if get_value_or_default(lambda: log_data.timestamp_start_charging is None):
                     log_data.timestamp_start_charging = now
-                    if chargepoint.data.control_parameter.submode == "time_charging":
+                    submode = get_value_or_default(lambda: chargepoint.data.control_parameter.submode, "")
+                    if submode == "time_charging":
                         log_data.chargemode_log_entry = "time_charging"
                     else:
-                        log_data.chargemode_log_entry = chargepoint.data.control_parameter.chargemode.value
-                if charging_ev.soc_module:
-                    if log_data.range_at_start is None:
+                        log_data.chargemode_log_entry = get_value_or_default(
+                            lambda: chargepoint.data.control_parameter.chargemode.value)
+
+                if get_value_or_default(lambda: charging_ev.soc_module if charging_ev else None):
+                    if get_value_or_default(lambda: log_data.range_at_start is None):
                         # manche Vehicle-Module liefern erstmal None
-                        log_data.range_at_start = charging_ev.data.get.range
-                    if (log_data.soc_at_start is None and
-                            chargepoint.data.set.plug_time < charging_ev.data.get.soc_timestamp):
+                        log_data.range_at_start = get_value_or_default(lambda: charging_ev.data.get.range)
+
+                    plug_time = get_value_or_default(lambda: chargepoint.data.set.plug_time, 0)
+                    soc_timestamp = get_value_or_default(lambda: charging_ev.data.get.soc_timestamp, 0)
+                    if (get_value_or_default(lambda: log_data.soc_at_start is None) and
+                            get_value_or_default(lambda: plug_time < soc_timestamp, True)):
                         # SoC muss nach dem Anstecken aktualisiert worden sein
-                        log_data.soc_at_start = charging_ev.data.get.soc
-                log_data.ev = chargepoint.data.set.charging_ev_data.num
-                log_data.prio = chargepoint.data.control_parameter.prio
-                log_data.rfid = chargepoint.data.set.rfid
+                        log_data.soc_at_start = get_value_or_default(lambda: charging_ev.data.get.soc)
+
+                log_data.ev = get_value_or_default(lambda: chargepoint.data.set.charging_ev_data.num, 0)
+                log_data.prio = get_value_or_default(lambda: chargepoint.data.control_parameter.prio, False)
+                log_data.rfid = get_value_or_default(lambda: chargepoint.data.set.rfid)
                 log_data.imported_since_mode_switch = get_value_or_default(
-                    lambda: chargepoint.data.get.imported - log_data.imported_at_mode_switch)
-                # log.debug(f"imported_since_mode_switch {log_data.imported_since_mode_switch} "
-                #           f"counter {chargepoint.data.get.imported}")
+                    lambda: chargepoint.data.get.imported - log_data.imported_at_mode_switch, 0)
+                log_data.exported_since_mode_switch = get_value_or_default(
+                    lambda: chargepoint.data.get.exported - log_data.exported_at_mode_switch, 0)
                 log_data.range_charged = _get_range_charged(log_data, charging_ev)
             else:
-                if log_data.timestamp_start_charging is not None:
-                    log_data.time_charged += now - log_data.timestamp_start_charging
+                timestamp_start_charging = get_value_or_default(lambda: log_data.timestamp_start_charging)
+                if timestamp_start_charging is not None:
+                    time_diff = get_value_or_default(lambda: now - timestamp_start_charging, 0)
+                    log_data.time_charged = get_value_or_default(lambda: log_data.time_charged + time_diff, 0)
                     log_data.timestamp_start_charging = None
                     log_data.end = now
             Pub().pub(f"openWB/set/chargepoint/{chargepoint.num}/set/log", asdict(log_data))
@@ -121,17 +140,13 @@ def collect_data(chargepoint):
         log.exception("Fehler im Ladelog-Modul")
 
 
-def save_interim_data(chargepoint, charging_ev, immediately: bool = True):
+def save_interim_data(chargepoint, charging_ev):
     try:
         log_data = chargepoint.data.set.log
         # Es wurde noch nie ein Auto zugeordnet
-        if log_data.imported_since_mode_switch == 0:
+        if log_data.imported_since_mode_switch == 0 and log_data.exported_since_mode_switch == 0:
             # Die Daten wurden schon erfasst.
             return
-        if not immediately:
-            if chargepoint.data.get.power != 0:
-                # Das Fahrzeug hat die Ladung noch nicht beendet. Der Logeintrag wird später erstellt.
-                return
         save_data(chargepoint, charging_ev)
         chargepoint.reset_log_data_chargemode_switch()
     except Exception:
@@ -156,7 +171,8 @@ def save_and_reset_data(chargepoint, charging_ev, immediately: bool = True):
             if chargepoint.data.get.power != 0:
                 # Das Fahrzeug hat die Ladung noch nicht beendet. Der Logeintrag wird später erstellt.
                 return
-        if chargepoint.data.set.log.imported_since_mode_switch > 0:
+        if (chargepoint.data.set.log.imported_since_mode_switch > 0 or
+                chargepoint.data.set.log.exported_since_mode_switch > 0):
             # Die Daten wurden noch nicht erfasst.
             save_data(chargepoint, charging_ev)
         chargepoint.reset_log_data()
@@ -173,13 +189,18 @@ def get_value_or_default(func, default: Optional[Any] = None):
 
 
 def _get_range_charged(log_data, charging_ev) -> float:
-    if log_data.range_at_start is not None:
-        return get_value_or_default(lambda: round(
-            charging_ev.data.get.range - log_data.range_at_start, 2))
-    else:
-        return get_value_or_default(lambda: round(
-            (log_data.imported_since_mode_switch * charging_ev.ev_template.data.efficiency /
-             charging_ev.ev_template.data.average_consump), 2))
+    try:
+        if log_data.range_at_start is not None:
+            return get_value_or_default(lambda: round(
+                charging_ev.data.get.range - log_data.range_at_start, 2))
+        else:
+            return get_value_or_default(lambda: round(
+                ((log_data.imported_since_mode_switch - log_data.exported_since_mode_switch)
+                 * charging_ev.ev_template.data.efficiency /
+                 charging_ev.ev_template.data.average_consump), 2))
+    except Exception:
+        log.exception("Fehler beim Berechnen der geladenen Reichweite")
+        return None
 
 
 def save_data(chargepoint, charging_ev):
@@ -194,7 +215,8 @@ def save_data(chargepoint, charging_ev):
         EV, das an diesem Ladepunkt lädt. (Wird extra übergeben, da es u.U. noch nicht zugewiesen ist und nur die
         Nummer aus dem Broker in der LP-Klasse hinterlegt ist.)
     """
-    if chargepoint.data.set.log.imported_since_mode_switch != 0:
+    if (chargepoint.data.set.log.imported_since_mode_switch != 0 or
+            chargepoint.data.set.log.exported_since_mode_switch != 0):
         new_entry = _create_entry(chargepoint, charging_ev)
         write_new_entry(new_entry)
 
@@ -206,6 +228,10 @@ def _create_entry(chargepoint, charging_ev):
         chargepoint.data.get.imported - log_data.imported_at_plugtime, 2))
     log_data.imported_since_mode_switch = get_value_or_default(lambda: round(
         chargepoint.data.get.imported - log_data.imported_at_mode_switch, 2))
+    log_data.exported_since_plugged = get_value_or_default(lambda: round(
+        chargepoint.data.get.exported - log_data.exported_at_plugtime, 2))
+    log_data.exported_since_mode_switch = get_value_or_default(lambda: round(
+        chargepoint.data.get.exported - log_data.exported_at_mode_switch, 2))
     log_data.range_charged = _get_range_charged(log_data, charging_ev)
     power = 0
     if log_data.timestamp_start_charging:
@@ -231,6 +257,8 @@ def _create_entry(chargepoint, charging_ev):
             "serial_number": get_value_or_default(lambda: chargepoint.data.get.serial_number),
             "imported_at_start": get_value_or_default(lambda: log_data.imported_at_mode_switch),
             "imported_at_end": get_value_or_default(lambda: chargepoint.data.get.imported),
+            "exported_at_start": get_value_or_default(lambda: log_data.exported_at_mode_switch),
+            "exported_at_end": get_value_or_default(lambda: chargepoint.data.get.exported),
         },
         "vehicle":
         {
@@ -255,6 +283,8 @@ def _create_entry(chargepoint, charging_ev):
         "data":
         {
             "range_charged": log_data.range_charged,
+            "exported_since_mode_switch": log_data.exported_since_mode_switch,
+            "exported_since_plugged": log_data.exported_since_plugged,
             "imported_since_mode_switch": log_data.imported_since_mode_switch,
             "imported_since_plugged": log_data.imported_since_plugged,
             "power": power,
@@ -290,16 +320,19 @@ def write_new_entry(new_entry):
 
 
 def calc_energy_costs(cp, create_log_entry: bool = False):
-    if cp.data.set.log.imported_since_plugged != 0 and cp.data.set.log.imported_since_mode_switch != 0:
-        processed_entries, reference_entries = _get_reference_entries()
-        charged_energy_by_source = calculate_charged_energy_by_source(
-            cp, processed_entries, reference_entries, create_log_entry)
-        _add_charged_energy_by_source(cp, charged_energy_by_source)
-        log.debug(f"charged_energy_by_source {charged_energy_by_source} "
-                  f"total charged_energy_by_source {cp.data.set.log.charged_energy_by_source}")
-        costs = _calc_costs(charged_energy_by_source, reference_entries[-1]["prices"])
-        cp.data.set.log.costs += costs
-        Pub().pub(f"openWB/set/chargepoint/{cp.num}/set/log", asdict(cp.data.set.log))
+    try:
+        if cp.data.set.log.imported_since_plugged != 0 and cp.data.set.log.imported_since_mode_switch != 0:
+            processed_entries, reference_entries = _get_reference_entries()
+            charged_energy_by_source = calculate_charged_energy_by_source(
+                cp, processed_entries, reference_entries, create_log_entry)
+            _add_charged_energy_by_source(cp, charged_energy_by_source)
+            log.debug(f"charged_energy_by_source {charged_energy_by_source} "
+                      f"total charged_energy_by_source {cp.data.set.log.charged_energy_by_source}")
+            costs = _calc_costs(charged_energy_by_source, reference_entries[-1]["prices"])
+            cp.data.set.log.costs += costs
+            Pub().pub(f"openWB/set/chargepoint/{cp.num}/set/log", asdict(cp.data.set.log))
+    except Exception:
+        log.exception(f"Fehler beim Berechnen der Ladekosten für Ladepunkt {cp.num}")
 
 
 def calculate_charged_energy_by_source(cp, processed_entries, reference_entries, create_log_entry: bool = False):
@@ -327,6 +360,9 @@ def calculate_charged_energy_by_source(cp, processed_entries, reference_entries,
             raise TypeError(f"Unbekannter Referenz-Zeitpunkt {reference}")
         log.debug(f'power source {relative_energy_source}')
         log.debug(f"charged_energy {charged_energy}")
+        if charged_energy < 100:
+            # wenn nur entladen wurde, keine Anteile berechnen
+            return {source: 0 for source in ENERGY_SOURCES}
         return _get_charged_energy_by_source(
             relative_energy_source, charged_energy)
 

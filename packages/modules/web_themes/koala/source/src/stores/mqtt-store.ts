@@ -1007,6 +1007,24 @@ export const useMqttStore = defineStore('mqtt', () => {
   };
 
   /**
+   * Get charge point charge type (AC/DC) identified by the charge point id
+   * @param chargePointId charge point id
+   * @returns string | undefined
+   */
+  const chargePointChargeType = (chargePointId: number) =>
+    computed(() => {
+      const templateId = getValue.value(
+        `openWB/chargepoint/${chargePointId}/config`,
+        'template',
+      ) as number | undefined;
+      if (templateId === undefined) return undefined;
+      return getValue.value(
+        `openWB/chargepoint/template/${templateId}`,
+        'charging_type',
+      ) as string | undefined;
+    });
+
+  /**
    * Get boolean value for DC charging enabled / disabled
    * @returns boolean
    */
@@ -3289,6 +3307,37 @@ export const useMqttStore = defineStore('mqtt', () => {
   });
 
   /**
+   * Get all counter ids from component hierarchy
+   * @returns number[]
+   */
+  const getAllCounterIds = computed(() => {
+    const hierarchy = getValue.value('openWB/counter/get/hierarchy') as
+      | Hierarchy[]
+      | undefined;
+    const getCounterIds = (
+      nodes: Hierarchy[] | undefined,
+      allCounters: number[] = [],
+    ): number[] => {
+      if (!nodes) return allCounters;
+      nodes.forEach((node) => {
+        if (node.type === 'counter') allCounters.push(node.id);
+        allCounters = getCounterIds(node.children, allCounters);
+      });
+      return allCounters;
+    };
+    return getCounterIds(hierarchy);
+  });
+
+  /**
+   * Get all secondary counter ids from all configured counters excluding the grid counter
+   * @returns number[]
+   */
+  const getSecondaryCounterIds = computed(() => {
+    const rootCounter = getGridId.value;
+    return getAllCounterIds.value.filter((id) => id !== rootCounter);
+  });
+
+  /**
    * Get the power meter(counter) name identified by the Grid ID
    * @param counterId counter ID
    * @returns string
@@ -3306,19 +3355,20 @@ export const useMqttStore = defineStore('mqtt', () => {
   });
 
   /**
-   * Get grid power identified from root of component hierarchy
+   * Get counter power identified by root grid counter in component hierarchy or counterId
    * @param returnType type of return value, 'textValue', 'value', 'scaledValue', 'scaledUnit' or 'object'
+   * @param counterId counter ID
    * @returns string | number | ValueObject | undefined
    */
-  const getGridPower = computed(() => {
-    return (returnType: string = 'textValue') => {
-      const gridId = getGridId.value;
-      if (gridId === undefined) {
+  const getCounterPower = computed(() => {
+    return (returnType: string = 'textValue', counterId?: number) => {
+      const id = counterId ?? getGridId.value;
+      if (id === undefined) {
         return '---';
       }
       const power =
         (getValue.value(
-          `openWB/counter/${gridId}/get/power`,
+          `openWB/counter/${id}/get/power`,
           undefined,
           0,
         ) as number) || 0;
@@ -3334,19 +3384,20 @@ export const useMqttStore = defineStore('mqtt', () => {
   });
 
   /**
-   * Get daily grid energy imported identified from root of component hierarchy
+   * Get daily counter energy imported identified by root grid counter in component hierarchy or counterId
    * @param returnType type of return value, 'textValue', 'value', 'scaledValue', 'scaledUnit' or 'object'
+   * @param counterId counter ID
    * @returns string | number | ValueObject | undefined
    */
-  const gridDailyImported = computed(() => {
-    return (returnType: string = 'textValue') => {
-      const gridId = getGridId.value;
-      if (gridId === undefined) {
+  const counterDailyImported = computed(() => {
+    return (returnType: string = 'textValue', counterId?: number) => {
+      const id = counterId ?? getGridId.value;
+      if (id === undefined) {
         return '---';
       }
       const energy =
         (getValue.value(
-          `openWB/counter/${gridId}/get/daily_imported`,
+          `openWB/counter/${id}/get/daily_imported`,
           undefined,
           0,
         ) as number) || 0;
@@ -3362,19 +3413,20 @@ export const useMqttStore = defineStore('mqtt', () => {
   });
 
   /**
-   * Get daily grid energy exported identified from root of component hierarchy
+   * Get daily counter energy exported identified by root grid counter in component hierarchy or counterId
    * @param returnType type of return value, 'textValue', 'value', 'scaledValue', 'scaledUnit' or 'object'
+   * @param counterId counter ID
    * @returns string | number | ValueObject | undefined
    */
-  const gridDailyExported = computed(() => {
-    return (returnType: string = 'textValue') => {
-      const gridId = getGridId.value;
-      if (gridId === undefined) {
+  const counterDailyExported = computed(() => {
+    return (returnType: string = 'textValue', counterId?: number) => {
+      const id = counterId ?? getGridId.value;
+      if (id === undefined) {
         return '---';
       }
       const energy =
         (getValue.value(
-          `openWB/counter/${gridId}/get/daily_exported`,
+          `openWB/counter/${id}/get/daily_exported`,
           undefined,
           0,
         ) as number) || 0;
@@ -3572,6 +3624,7 @@ export const useMqttStore = defineStore('mqtt', () => {
     chargePointStateMessage,
     chargePointFaultState,
     chargePointFaultMessage,
+    chargePointChargeType,
     dcChargingEnabled,
     chargePointConnectedVehicleInfo,
     chargePointConnectedVehicleForceSocUpdate,
@@ -3670,10 +3723,12 @@ export const useMqttStore = defineStore('mqtt', () => {
     batteryMode,
     // Grid data
     getGridId,
+    getAllCounterIds,
+    getSecondaryCounterIds,
     getComponentName,
-    getGridPower,
-    gridDailyImported,
-    gridDailyExported,
+    getCounterPower,
+    counterDailyImported,
+    counterDailyExported,
     // Home data
     getHomePower,
     homeDailyYield,

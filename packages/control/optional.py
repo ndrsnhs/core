@@ -2,10 +2,9 @@
 """
 import logging
 from math import ceil
-import random
 from threading import Thread
-from typing import List, Optional as TypingOptional, Union
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional as TypingOptional, Union
+from datetime import datetime
 
 from control import data
 from control.ocpp import OcppMixin
@@ -20,7 +19,6 @@ from modules.common.configurable_monitoring import ConfigurableMonitoring
 
 log = logging.getLogger(__name__)
 AS_EURO_PER_KWH = 1000.0  # Umrechnung von €/Wh in €/kWh
-TARIFF_UPDATE_HOUR = 14  # latest expected time for daily tariff update
 
 
 class Optional(OcppMixin):
@@ -47,9 +45,6 @@ class Optional(OcppMixin):
             self.data.electricity_pricing.flexible_tariff.get = PricingGet()
             self._reset_state(self.data.electricity_pricing.flexible_tariff, "flexible_tariff")
         self._flexible_tariff_module = value
-        if value:
-            self.data.electricity_pricing.get.next_query_time = None
-            Pub().pub("openWB/set/optional/ep/get/next_query_time", None)
         self._set_ep_configured()
 
     @property
@@ -63,9 +58,6 @@ class Optional(OcppMixin):
             self.data.electricity_pricing.grid_fee.get = PricingGet()
             self._reset_state(self.data.electricity_pricing.grid_fee, "grid_fee")
         self._grid_fee_module = value
-        if value:
-            self.data.electricity_pricing.get.next_query_time = None
-            Pub().pub("openWB/set/optional/ep/get/next_query_time", None)
         self._set_ep_configured()
 
     def _set_ep_configured(self):
@@ -84,6 +76,7 @@ class Optional(OcppMixin):
             Pub().pub(f"openWB/set/optional/ep/{module_name}/get/fault_str", NO_ERROR)
         Pub().pub(f"openWB/set/optional/ep/{module_name}/get/prices", {})
         Pub().pub("openWB/set/optional/ep/get/prices", {})
+        Pub().pub("openWB/set/optional/ep/get/next_query_time", None)
 
     def monitoring_start(self):
         if self.monitoring_module is not None:
@@ -142,32 +135,48 @@ class Optional(OcppMixin):
             return False
 
     def __get_first_entry(self) -> tuple[str, float]:
-        if self.data.electricity_pricing.configured:
-            prices = self.data.electricity_pricing.get.prices
-            if prices is None or len(prices) == 0:
-                raise Exception("Keine Preisdaten für strompreisbasiertes Laden vorhanden.")
-            else:
-                timestamp, first = next(iter(prices.items()))
-                price_timeslot_seconds = self.__calculate_price_timeslot_length(prices)
-                now = timecheck.create_timestamp()
-                prices = {
-                    price[0]: price[1]
-                    for price in prices.items()
-                    if float(price[0]) > now - (price_timeslot_seconds - 1)
-                }
-                self.data.electricity_pricing.get.prices = prices
-                timestamp, first = next(iter(prices.items()))
-                return timestamp, first
+        prices = self.data.electricity_pricing.get.prices
+        if prices is None or len(prices) == 0:
+            raise Exception("Keine Preisdaten für strompreisbasiertes Laden vorhanden.")
         else:
-            raise Exception("Kein Anbieter für strompreisbasiertes Laden konfiguriert.")
+            timestamp, first = next(iter(prices.items()))
+            return timestamp, first
+
+    def remove_outdated_prices(self):
+        def remove(price_data: Dict) -> Dict:
+            price_timeslot_seconds = self.__calculate_price_timeslot_length(price_data)
+            now = timecheck.create_timestamp()
+            return {
+                price[0]: price[1]
+                for price in price_data.items()
+                if float(price[0]) > now - (price_timeslot_seconds - 1)
+            }
+
+        try:
+            if self.data.electricity_pricing.configured:
+                if len(self.data.electricity_pricing.get.prices) >= 0:
+                    ep = self.data.electricity_pricing
+                    ep.get.prices = remove(ep.get.prices)
+                    Pub().pub("openWB/set/optional/ep/get/prices", ep.get.prices)
+                if self._flexible_tariff_module:
+                    ep.flexible_tariff.get.prices = remove(ep.flexible_tariff.get.prices)
+                    Pub().pub("openWB/set/optional/ep/flexible_tariff/get/prices", ep.flexible_tariff.get.prices)
+                if self._grid_fee_module:
+                    ep.grid_fee.get.prices = remove(ep.grid_fee.get.prices)
+                    Pub().pub("openWB/set/optional/ep/grid_fee/get/prices", ep.grid_fee.get.prices)
+        except Exception:
+            log.exception("Fehler beim Entfernen veralteter Preise")
 
     def __get_current_timeslot_start(self) -> int:
         timestamp = self.__get_first_entry()[0]
         return float(timestamp)
 
     def ep_get_current_price(self) -> float:
-        first = self.__get_first_entry()[1]
-        return first
+        if self.data.electricity_pricing.configured:
+            first = self.__get_first_entry()[1]
+            return first
+        else:
+            raise Exception("Kein Anbieter für strompreisbasiertes Laden konfiguriert.")
 
     def __calculate_price_timeslot_length(self, prices: dict) -> int:
         first_timestamps = list(prices.keys())[:2]
@@ -226,46 +235,23 @@ class Optional(OcppMixin):
             return []
 
     def et_price_update_required(self) -> bool:
-        def is_tomorrow(last_timestamp: str) -> bool:
-            return (day_of(date=datetime.now()) < day_of(datetime.fromtimestamp(float(last_timestamp)))
-                    or day_of(date=datetime.now()).hour < TARIFF_UPDATE_HOUR)
-
-        def day_of(date: datetime) -> datetime:
-            return date.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        def get_last_entry_time_stamp() -> str:
-            last_known_timestamp = "0"
-            if self.data.electricity_pricing.get.prices is not None:
-                last_known_timestamp = max(self.data.electricity_pricing.get.prices)
-            return last_known_timestamp
         self._set_ep_configured()
         if self.data.electricity_pricing.configured is False:
             return False
         if len(self.data.electricity_pricing.get.prices) == 0:
             return True
         if self.data.electricity_pricing.get.next_query_time is None:
-            next_query_time = datetime.fromtimestamp(float(max(self.data.electricity_pricing.get.prices))).replace(
-                hour=TARIFF_UPDATE_HOUR, minute=0, second=0
-            ) + timedelta(
-                # aktually ET providers issue next day prices up to half an hour earlier then 14:00
-                # reduce serverload on their site by trying early and randomizing query time
-                minutes=random.randint(1, 7) * -5
-            )
-            self.data.electricity_pricing.get.next_query_time = next_query_time.timestamp()
-            Pub().pub("openWB/set/optional/ep/get/next_query_time", self.data.electricity_pricing.get.next_query_time)
             return True
-        if is_tomorrow(get_last_entry_time_stamp()):
-            if timecheck.create_timestamp() > self.data.electricity_pricing.get.next_query_time:
-                next_query_formatted = datetime.fromtimestamp(
-                    self.data.electricity_pricing.get.next_query_time).strftime("%Y%m%d-%H:%M:%S")
-                log.info(f'Wartezeit {next_query_formatted} abgelaufen, Strompreise werden abgefragt')
-                return True
-            else:
-                next_query_formatted = datetime.fromtimestamp(
-                    self.data.electricity_pricing.get.next_query_time).strftime("%Y%m%d-%H:%M:%S")
-                log.info(f'Nächster Abruf der Strompreise {next_query_formatted}.')
-                return False
-        return False
+        if timecheck.create_timestamp() > self.data.electricity_pricing.get.next_query_time:
+            next_query_formatted = datetime.fromtimestamp(
+                self.data.electricity_pricing.get.next_query_time).strftime("%Y%m%d-%H:%M:%S")
+            log.info(f'Wartezeit {next_query_formatted} abgelaufen, Strompreise werden abgefragt')
+            return True
+        else:
+            next_query_formatted = datetime.fromtimestamp(
+                self.data.electricity_pricing.get.next_query_time).strftime("%Y%m%d-%H:%M:%S")
+            log.info(f'Nächster Abruf der Strompreise {next_query_formatted}.')
+            return False
 
     def ocpp_transfer_meter_values(self):
         try:

@@ -425,9 +425,7 @@ class SetData:
                                 if cp.num == cp_num:
                                     # nicht an den Ladepunkt senden, der das Topic gesendet hat
                                     continue
-                                if ((cp.data.set.charging_ev != -1 and
-                                        cp.data.set.charging_ev == vehicle.num) or
-                                        cp.data.config.ev == vehicle.num):
+                                if cp.data.config.ev == vehicle.num:
                                     if decode_payload(msg.payload) == "":
                                         Pub().pub(
                                             f"openWB/chargepoint/{cp.num}/set/charge_template", "")
@@ -629,7 +627,8 @@ class SetData:
             elif subdata.SubData.pv_data.get(f"pv{get_index(msg.topic)}"):
                 if "/get/fault_state" in msg.topic:
                     self._validate_value(msg, int, [(0, 2)])
-                elif "/get/fault_str" in msg.topic:
+                elif ("/get/fault_str" in msg.topic or
+                      "/get/serial_number" in msg.topic):
                     self._validate_value(msg, str)
                 elif ("/get/daily_exported" in msg.topic or
                         "/get/monthly_exported" in msg.topic or
@@ -698,7 +697,8 @@ class SetData:
                     self._validate_value(msg, float, [(0, 100)])
                 elif "/get/fault_state" in msg.topic:
                     self._validate_value(msg, int, [(0, 2)])
-                elif "/get/fault_str" in msg.topic:
+                elif ("/get/fault_str" in msg.topic or
+                      "/get/serial_number" in msg.topic):
                     self._validate_value(msg, str)
                 elif "/set/power_limit_controllable" in msg.topic:
                     self._validate_value(msg, bool)
@@ -950,7 +950,8 @@ class SetData:
                     self._validate_value(msg, int, [(0, 2)])
                 elif "/set/error_timer" in msg.topic:
                     self._validate_value(msg, float, [(0, float("inf"))])
-                elif "/get/fault_str" in msg.topic:
+                elif ("/get/fault_str" in msg.topic or
+                      "/get/serial_number" in msg.topic):
                     self._validate_value(msg, str)
                 elif "/get/power" in msg.topic:
                     self._validate_value(

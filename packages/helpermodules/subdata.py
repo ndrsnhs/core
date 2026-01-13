@@ -132,7 +132,6 @@ class SubData:
             ("openWB/general/#", 2),
             ("openWB/graph/#", 2),
             ("openWB/internal_io/#", 2),
-            ("openWB/io/#", 2),
             ("openWB/optional/#", 2),
             ("openWB/counter/#", 2),
             ("openWB/command/command_completed", 2),
@@ -148,6 +147,7 @@ class SubData:
             ("openWB/system/device/+/config", 2),
             ("openWB/system/io/#", 2),
             ("openWB/LegacySmartHome/Status/wattnichtHaus", 2),
+            ("openWB/io/#", 2),
         ])
         self.processing_counter.add_task()
         Pub().pub("openWB/system/subdata_initialized", True)
@@ -356,8 +356,7 @@ class SubData:
                     for vehicle in self.ev_data.values():
                         if vehicle.data.charge_template == int(index):
                             for cp in self.cp_data.values():
-                                if (cp.chargepoint.data.set.charging_ev == vehicle.num or
-                                        cp.chargepoint.data.config.ev == vehicle.num):
+                                if cp.chargepoint.data.config.ev == vehicle.num:
                                     # UI sendet immer alle Topics, auch nicht geänderte. Damit die temporären Topics
                                     # nicht mehrfach gepbulished werden, muss das publishen der temporären Topics 1:1
                                     # erfolgen.
@@ -480,7 +479,8 @@ class SubData:
             config = dataclass_from_dict(mod.chargepoint_descriptor.configuration_factory, payload)
             var["cp"+index].chargepoint.chargepoint_module = mod.ChargepointModule(config)
             self.set_internal_chargepoint_configured()
-        if payload["type"] == "internal_openwb":
+        if (payload["type"] == "internal_openwb" and
+                payload["type"] != var["cp"+index].chargepoint.chargepoint_module.config.type):
             log.debug("Neustart des Handlers für den internen Ladepunkt.")
             self.event_stop_internal_chargepoint.set()
             self.event_start_internal_chargepoint.set()
@@ -676,7 +676,8 @@ class SubData:
                         mod = importlib.import_module(
                             f".io_actions.{payload['group']}.{payload['type']}.api", "modules")
                         config = dataclass_from_dict(mod.device_descriptor.configuration_factory, payload)
-                        var.actions[f"io_action{index}"] = mod.create_action(config)
+                        var.actions[f"io_action{index}"] = mod.create_action(
+                            config, self.system_data[f"io{config.configuration.io_device}"].config.type)
                 elif re.search("/io/action/[0-9]+/timestamp", msg.topic) is not None:
                     index = get_index(msg.topic)
                     self.set_json_payload_class(var.actions[f"io_action{index}"], msg)

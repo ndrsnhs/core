@@ -47,7 +47,7 @@ from modules.common.component_type import ComponentType
 from modules.devices.sungrow.sungrow.version import Version
 from modules.display_themes.cards.config import CardsDisplayTheme
 from modules.io_actions.controllable_consumers.ripple_control_receiver.config import RippleControlReceiverSetup
-from modules.web_themes.standard_legacy.config import StandardLegacyWebTheme
+from modules.web_themes.koala.config import KoalaWebTheme
 from modules.devices.good_we.good_we.version import GoodWeVersion
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ NO_MODULE = {"type": None, "configuration": {}}
 
 class UpdateConfig:
 
-    DATASTORE_VERSION = 102
+    DATASTORE_VERSION = 107
 
     valid_topic = [
         "^openWB/bat/config/bat_control_permitted$",
@@ -282,10 +282,6 @@ class UpdateConfig:
         "^openWB/internal_chargepoint/[0-1]/get/rfid$",
         "^openWB/internal_chargepoint/[0-1]/get/rfid_timestamp$",
 
-        "^openWB/io/states/[0-9]+/get/digital_input$",
-        "^openWB/io/states/[0-9]+/get/analog_input$",
-        "^openWB/io/states/[0-9]+/set/digital_output$",
-        "^openWB/io/states/[0-9]+/set/analog_output$",
         "^openWB/io/action/[0-9]+/config$",
         "^openWB/io/action/[0-9]+/timestamp$",
 
@@ -573,7 +569,7 @@ class UpdateConfig:
         ("openWB/general/prices/pv", Prices().pv),
         ("openWB/general/range_unit", "km"),
         ("openWB/general/temporary_charge_templates_active", False),
-        ("openWB/general/web_theme", dataclass_utils.asdict(StandardLegacyWebTheme())),
+        ("openWB/general/web_theme", dataclass_utils.asdict(KoalaWebTheme())),
         ("openWB/graph/config/duration", 120),
         ("openWB/internal_chargepoint/0/data/parent_cp", None),
         ("openWB/internal_chargepoint/1/data/parent_cp", None),
@@ -2635,4 +2631,73 @@ class UpdateConfig:
             if "openWB/optional/et/provider" == topic:
                 return {"openWB/optional/ep/flexible_tariff/provider": decode_payload(payload)}
         self._loop_all_received_topics(upgrade)
-        self.__update_topic("openWB/system/datastore_version", 102)
+        self._append_datastore_version(102)
+
+    def upgrade_datastore_103(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if re.search("openWB/system/device/[0-9]+", topic) is not None:
+                payload = decode_payload(payload)
+                index = get_index(topic)
+                if payload.get("type") == "victron":
+                    for component_topic, component_payload in self.all_received_topics.items():
+                        if re.search(f"openWB/system/device/{index}/component/[0-9]+/config$",
+                                     component_topic) is not None:
+                            config_payload = decode_payload(component_payload)
+                            if (config_payload["type"] == "bat" and
+                                    config_payload["configuration"].get("vebus_id") is None):
+                                config_payload["configuration"].update({
+                                    "vebus_id": 228,
+                                })
+                                return {component_topic: config_payload}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(103)
+
+    def upgrade_datastore_104(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if "openWB/optional/ep/flexible_tariff/provider" == topic:
+                provider = decode_payload(payload)
+                if provider["type"] == "awattar":
+                    if provider["configuration"].get("net") is None:
+                        provider["configuration"]["net"] = False
+                        provider["configuration"]["fix"] = 0.015
+                        provider["configuration"]["proportional"] = 0.03
+                        provider["configuration"]["tax"] = 0.2
+                        return {topic: provider}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(104)
+
+    def upgrade_datastore_105(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if "openWB/general/charge_log_data_config" == topic:
+                config = decode_payload(payload)
+                if config.get("data_exported_since_mode_switch") is None:
+                    config["data_exported_since_mode_switch"] = False
+                if config.get("chargepoint_exported_at_start") is None:
+                    config["chargepoint_exported_at_start"] = False
+                if config.get("chargepoint_exported_at_end") is None:
+                    config["chargepoint_exported_at_end"] = False
+                return {topic: config}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(105)
+
+    def upgrade_datastore_106(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if re.search("openWB/vehicle/[0-9]+/soc_module/config", topic) is not None:
+                config = decode_payload(payload)
+                if config.get("type") == "http" or config.get("type") == "mqtt":
+                    config["configuration"]["calculate_soc"] = False
+                return {topic: config}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(106)
+
+    def upgrade_datastore_107(self) -> None:
+        def upgrade(topic: str, payload) -> None:
+            if re.search("openWB/optional/ep/flexible_tariff/provider", topic) is not None:
+                provider = decode_payload(payload)
+                if provider.get("type") == "awattar":
+                    if provider["configuration"].get("fix") is not None and provider["configuration"]["fix"] > 0.005:
+                        # convert fix from ct/kWh to €/kWh
+                        provider["configuration"]["fix"] = round(provider["configuration"]["fix"] / 1000.0, 7)
+                        return {topic: provider}
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(107)
