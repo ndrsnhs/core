@@ -24,7 +24,7 @@ from typing import List, Optional
 
 from control import data
 from control.algorithm.chargemodes import CONSIDERED_CHARGE_MODES_CHARGING
-from control.algorithm.filter_chargepoints import get_chargepoints_by_chargemodes
+from control.algorithm.filter_chargepoints import get_chargepoints_with_required_current_by_chargemode
 from control.pv import Pv
 from helpermodules.constants import NO_ERROR
 from modules.common.abstract_device import AbstractDevice
