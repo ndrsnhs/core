@@ -57,7 +57,7 @@ NO_MODULE = {"type": None, "configuration": {}}
 
 class UpdateConfig:
 
-    DATASTORE_VERSION = 112
+    DATASTORE_VERSION = 113
 
     valid_topic = [
         "^openWB/bat/config/bat_control_permitted$",
@@ -71,6 +71,7 @@ class UpdateConfig:
         "^openWB/bat/config/price_limit$",
         "^openWB/bat/config/price_charge_activated$",
         "^openWB/bat/config/charge_limit$",
+        "^openWB/bat/[0-9]+/config/max_power$",
         "^openWB/bat/[0-9]+/get/max_charge_power$",
         "^openWB/bat/[0-9]+/get/max_discharge_power$",
         "^openWB/bat/[0-9]+/get/state_str$",
@@ -2859,3 +2860,17 @@ class UpdateConfig:
         run_command(['pip', 'uninstall', 'bimmer_connected', '-y'], process_exception=True)
         self._loop_all_received_topics(upgrade)
         self._append_datastore_version(112)
+
+    def upgrade_datastore_113(self) -> None:
+        def upgrade(topic: str, payload) -> Optional[dict]:
+            if re.search("^openWB/bat/[0-9]+/get/power$", topic) is not None:
+                index = get_index(topic)
+                new_topics = {}
+                # add new topics for battery control:
+                # openWB/bat/[0-9]+/get/max_charge_power => 0
+                # openWB/bat/[0-9]+/get/max_discharge_power => 0
+                if f"openWB/bat/{index}/config/max_power" not in self.all_received_topics:
+                    new_topics[f"openWB/bat/{index}/config/max_power"] = 0
+                return new_topics if new_topics else None
+        self._loop_all_received_topics(upgrade)
+        self._append_datastore_version(113)
