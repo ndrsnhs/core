@@ -29,7 +29,7 @@ class EcoflowStreamCounter(AbstractCounter):
         self.peak_filter = PeakFilter(ComponentType.COUNTER, self.component_config.id, self.fault_state)
 
     def update(self, response) -> None:
-        power = float(response['data']['gridConnectionPower'])
+        power = float(response['data']['powGetSysGrid'])
         self.peak_filter.check_values(power)
         imported, exported = self.sim_counter.sim_count(power)
 
