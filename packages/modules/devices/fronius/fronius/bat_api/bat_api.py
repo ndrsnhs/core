@@ -317,7 +317,7 @@ class FroniusWR:
         # activate timeofuse rules
         timeofuselist = [{'Active': True,
                           'Power': int(dischargerate),
-                          'ScheduleType': 'DISCHARGE_MIN',
+                          'ScheduleType': 'DISCHARGE_MAX',
                           "TimeTable": {"Start": "00:00", "End": "23:59"},
                           "Weekdays":
                           {"Mon": True,
