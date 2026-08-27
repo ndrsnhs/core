@@ -49,10 +49,23 @@ def set_factory() -> Set:
 
 
 @dataclass
+class LimitControllable:
+    stop: bool = field(default=False, metadata={"topic": "limit_controllable/stop"})
+    charge: bool = field(default=False, metadata={"topic": "limit_controllable/charge"})
+    discharge: bool = field(default=False, metadata={"topic": "limit_controllable/discharge"})
+    set_power: bool = field(default=False, metadata={"topic": "limit_controllable/set_power"})
+
+
+def limit_controllable_factory() -> LimitControllable:
+    return LimitControllable()
+
+
+@dataclass
 class BatData:
     config: Config = field(default_factory=config_factory)
     get: Get = field(default_factory=get_factory)
     set: Set = field(default_factory=set_factory)
+    limit_controllable: LimitControllable = field(default_factory=limit_controllable_factory)
 
 
 class Bat:
