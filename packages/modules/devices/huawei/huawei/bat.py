@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+import logging
 import time
-from typing import TypedDict, Any
+from typing import TypedDict, Any, Optional
 
 from modules.common.abstract_device import AbstractBat
 from modules.common.component_state import BatState
@@ -13,6 +14,8 @@ from modules.common.store import get_component_value_store
 from modules.devices.huawei.huawei.config import HuaweiBatSetup
 from modules.devices.huawei.huawei.type import HuaweiType
 from modules.common.component_type import ComponentType
+
+log = logging.getLogger(__name__)
 
 
 class KwargsDict(TypedDict):
@@ -36,6 +39,7 @@ class HuaweiBat(AbstractBat):
         self.store = get_component_value_store(self.component_config.type, self.component_config.id)
         self.fault_state = FaultState(ComponentInfo.from_component_config(self.component_config))
         self.peak_filter = PeakFilter(ComponentType.BAT, self.component_config.id, self.fault_state)
+        self.last_mode = 'Undefined'
 
     def update(self) -> None:
         if self.type == HuaweiType.SDongle:
@@ -54,6 +58,51 @@ class HuaweiBat(AbstractBat):
             exported=exported
         )
         self.store.set(bat_state)
+
+    def set_power_limit(self, power_limit: Optional[int]) -> None:
+        if self.type == HuaweiType.SDongle:
+            return
+        modbus_id = self.component_config.configuration.modbus_id
+        if power_limit is None:
+            log.debug("Keine Batteriesteuerung, Selbstregelung durch Speicher")
+            if self.last_mode is not None:
+                self.__tcp_client.write_register(47100, 0, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+                self.last_mode = None
+        elif power_limit == 0:
+            log.debug("Aktive Batteriesteuerung Huawei Sun2000. Batterie wird auf Stop gesetzt und nicht entladen")
+            if self.last_mode != 'stop':
+                self.last_mode = 'stop'
+            # discharge
+            self.__tcp_client.write_register(47100, 2, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47246, 0, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47083, 1, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47249, 0, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+        elif power_limit < 0:
+            log.debug(f"Aktive Batteriesteuerung Huawei Sun2000:"
+                      f"Speicher soll mit {power_limit} W entladen werden.")
+            if self.last_mode != 'discharge':
+                self.last_mode = 'discharge'
+            # discharge
+            self.__tcp_client.write_register(47100, 2, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47246, 0, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47083, 1, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47249, -power_limit, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+        elif power_limit > 0:
+            log.debug(f"Aktive Batteriesteuerung Huawei Sun2000:"
+                      f"Speicher soll mit {power_limit} W geladen werden.")
+            if self.last_mode != 'charge':
+                self.last_mode = 'charge'
+            # charge
+            self.__tcp_client.write_register(47100, 1, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47246, 0, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47083, 1, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47247, power_limit, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+            self.__tcp_client.write_register(47087, 1, data_type=ModbusDataType.UINT_16, unit=modbus_id)
+
+    def power_limit_controllable(self) -> bool:
+        if self.type == HuaweiType.SDongle:
+            return False
+        return True
 
 
 component_descriptor = ComponentDescriptor(configuration_factory=HuaweiBatSetup)
