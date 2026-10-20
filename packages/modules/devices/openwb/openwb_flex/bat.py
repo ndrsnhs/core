@@ -44,28 +44,15 @@ class BatKitFlex(AbstractBat):
             counter_state = self.__client.get_counter_state()
 
         power = counter_state.power
-        if isinstance(self.__client, Lovato) or isinstance(self.__client, Sdm120):
-            self.peak_filter.check_values(power)
-            imported, exported = self.sim_counter.sim_count(power)
-            currents = self.__client.get_currents()
-        else:
-            imported = counter_state.imported
-            exported = counter_state.exported
-
-            voltages = self.__client.get_voltages()
-            powers, power = self.__client.get_power()
-            imported, exported = self.peak_filter.check_values(power, imported, exported)
-            if isinstance(self.__client, Mpm3pm):
-                currents = [powers[i] / voltages[i] for i in range(3)]
-            else:
-                currents = self.__client.get_currents()
+        self.peak_filter.check_values(power)
+        imported, exported = self.sim_counter.sim_count(power)
 
         bat_state = BatState(
-            currents=currents,
+            power=power,
             imported=imported,
             exported=exported,
-            power=power,
-            serial_number=counter_state.serial_number,
+            currents=counter_state.currents,
+            serial_number=counter_state.serial_number
         )
         self.store.set(bat_state)
 

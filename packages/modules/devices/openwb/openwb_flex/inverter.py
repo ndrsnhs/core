@@ -44,16 +44,8 @@ class PvKitFlex(AbstractInverter):
             counter_state = self.__client.get_counter_state()
 
         power = counter_state.power
-        version = self.component_config.configuration.version
-        if version == 1:
-            power = sum(counter_state.powers)
-        if isinstance(self.__client, Lovato) or isinstance(self.__client, Sdm120):
-            self.peak_filter.check_values(power)
-            imported, exported = self.sim_counter.sim_count(power)
-        else:
-            imported, exported = self.peak_filter.check_values(power,
-                                                               counter_state.imported,
-                                                               counter_state.exported)
+        self.peak_filter.check_values(power)
+        imported, exported = self.sim_counter.sim_count(power)
 
         inverter_state = InverterState(
             power=power,

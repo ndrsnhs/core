@@ -41,14 +41,8 @@ class EvuKitFlex(AbstractCounter):
         with self.__tcp_client:
             counter_state = self.__client.get_counter_state()
 
-        if isinstance(self.__client, Mpm3pm) or isinstance(self.__client, B23):
-            counter_state.currents = [counter_state.powers[i] / counter_state.voltages[i] for i in range(3)]
-            counter_state.imported, counter_state.exported = self.peak_filter.check_values(counter_state.power,
-                                                                                           counter_state.imported,
-                                                                                           counter_state.exported)
-        else:
-            self.peak_filter.check_values(counter_state.power)
-            counter_state.imported, counter_state.exported = self.sim_counter.sim_count(counter_state.power)
+        self.peak_filter.check_values(counter_state.power)
+        counter_state.imported, counter_state.exported = self.sim_counter.sim_count(counter_state.power)
 
         self.store.set(counter_state)
 
