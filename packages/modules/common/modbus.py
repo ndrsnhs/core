@@ -218,19 +218,20 @@ class ModbusClient:
 
     def write_register(self, address: int, value: Union[int, float], data_type: Optional[ModbusDataType] = None,
                        byteorder: str = Endian.Big, wordorder: str = Endian.Big, **kwargs: Any):
+        """Write registers with FC16 and return the delegate's Modbus response for optional validation."""
         with self._lock:
             if data_type is not None:
                 if data_type.bits > 16 or data_type in [ModbusDataType.FLOAT_16,
                                                         ModbusDataType.FLOAT_32,
                                                         ModbusDataType.FLOAT_64]:
                     registers = self._build_binary_payload(value, data_type, byteorder, wordorder)
-                    self._delegate.write_registers(address, registers, **kwargs)
+                    return self._delegate.write_registers(address, registers, **kwargs)
                 else:
                     # Einfache 16-bit oder kleinere Werte können direkt geschrieben werden
-                    self._delegate.write_registers(address, [value], **kwargs)
+                    return self._delegate.write_registers(address, [value], **kwargs)
             else:
                 # Fallback für bestehenden Code ohne data_type
-                self._delegate.write_registers(address, value, **kwargs)
+                return self._delegate.write_registers(address, value, **kwargs)
 
     def write_single_register_raw(self, address: int, value: int, **kwargs: Any):
         # FC06 (Write Single Register) statt FC16 wie write_register() oben - manche Geräte akzeptieren

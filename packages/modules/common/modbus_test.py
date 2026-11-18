@@ -2,6 +2,8 @@ import threading
 import time
 from unittest.mock import Mock
 
+import pytest
+
 from modules.common.modbus import ModbusClient, ModbusDataType
 
 
@@ -68,3 +70,23 @@ def test_write_single_register_raw_uses_fc06_not_fc16():
 
     delegate.write_register.assert_called_once_with(1000, 42, unit=1)
     delegate.write_registers.assert_not_called()
+
+
+@pytest.mark.parametrize("value,data_type,registers", [
+    (-100000, ModbusDataType.INT_32, [0xFFFE, 0x7960]),
+    (0xFFFFFFFF, ModbusDataType.UINT_32, [0xFFFF, 0xFFFF]),
+    (42, ModbusDataType.UINT_16, [42]),
+    (1.0, ModbusDataType.FLOAT_32, [0x3F80, 0]),
+    ([1, 2], None, [1, 2]),
+])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_write_register_returns_delegate_response(value, data_type, registers, is_error):
+    delegate = Mock()
+    response = delegate.write_registers.return_value
+    response.isError.return_value = is_error
+    client = ModbusClient(delegate, "test", 502)
+
+    assert client.write_register(1200, value, data_type=data_type, unit=1) is response
+
+    delegate.write_registers.assert_called_once_with(1200, registers, unit=1)
+    delegate.write_register.assert_not_called()
